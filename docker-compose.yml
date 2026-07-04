@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: sales_ai_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DATABASE_PATH=/app/database/sales.db
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+    volumes:
+      - ./backend/database:/app/database
+      - ./backend/logs:/app/logs
+    depends_on:
+      mcp_server:
+        condition: service_healthy
+    networks:
+      - sales_ai_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mcp_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    container_name: sales_ai_mcp
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_PATH=/app/database/sales.db
+    volumes:
+      - ./backend/database:/app/database
+    networks:
+      - sales_ai_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sales_ai_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - sales_ai_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  sales_ai_network:
+    driver: bridge
+
+volumes:
+  sales_db:
