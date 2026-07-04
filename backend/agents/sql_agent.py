@@ -28,8 +28,17 @@ Database Schema:
 
 User Intent:
 - Type: {intent_type}
-- Entities: {entities}
+- Tables: {tables}
 - Metrics: {metrics}
+- SQL Keywords: {sql_keywords}
+
+Rules:
+1. ONLY SELECT statements allowed
+2. Use proper JOINs for multi-table queries
+3. Include GROUP BY for aggregations
+4. Use ORDER BY for sorting
+5. Add LIMIT for large result sets
+6. Use aliases for readability
 
 Generate a single, optimized SELECT query.
 Return ONLY the SQL query, no explanation.
@@ -38,17 +47,26 @@ Question: {question}
 """)
         
         self.parser = StrOutputParser()
+        self.dangerous_keywords = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE", "PRAGMA", "ATTACH", "DETACH"]
     
     def _get_schema(self) -> str:
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-        
-        schema = "\n\n".join([row[0] for row in cursor.fetchall()])
-        conn.close()
-        
-        return schema
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT sql FROM sqlite_master 
+                WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                ORDER BY name
+            """)
+            
+            schema_list = [row[0] for row in cursor.fetchall() if row[0]]
+            conn.close()
+            
+            return "\n\n".join(schema_list)
+        except Exception as e:
+            logger.error(f"[SQL] Error getting schema: {e}")
+            return ""
     
     def generate_query(self, question: str, intent: Dict[str, Any]) -> str:
         try:
@@ -58,22 +76,27 @@ Question: {question}
                 "question": question,
                 "schema": self.schema,
                 "intent_type": intent.get("intent", "unknown"),
-                "entities": intent.get("entities", {}),
-                "metrics": intent.get("metrics", [])
+                "tables": intent.get("entities", {}).get("tables", []),
+                "metrics": intent.get("metrics", []),
+                "sql_keywords": intent.get("sql_keywords", [])
             })
             
-            dangerous_keywords = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE", "PRAGMA"]
+            # Security check: prevent injection
             query_upper = query.upper()
-            
-            for keyword in dangerous_keywords:
+            for keyword in self.dangerous_keywords:
                 if keyword in query_upper:
-                    logger.error(f"Dangerous SQL detected: {keyword}")
+                    logger.error(f"[SQL] Dangerous keyword detected: {keyword}")
                     return None
             
-            logger.info(f"Generated SQL query")
+            # Ensure it's a SELECT query
+            if not query_upper.strip().startswith("SELECT"):
+                logger.error(f"[SQL] Not a SELECT query")
+                return None
+            
+            logger.info(f"[SQL] Generated: {query[:80]}...")
             return query
         except Exception as e:
-            logger.error(f"Error generating SQL: {e}")
+            logger.error(f"[SQL] Error generating query: {e}")
             return None
     
     def execute_query(self, sql_query: str) -> List[Dict[str, Any]]:
@@ -87,8 +110,8 @@ Question: {question}
             conn.close()
             
             results = [dict(row) for row in rows]
-            logger.info(f"Query returned {len(results)} rows")
+            logger.info(f"[SQL] Executed: {len(results)} rows returned")
             return results
         except Exception as e:
-            logger.error(f"Error executing query: {e}")
+            logger.error(f"[SQL] Error executing query: {e}")
             return []
