@@ -84,3 +84,39 @@ python-decouple>=3.8
 # -------------------------------
 orjson>=3.11.0
 tenacity>=9.1.2
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# LLM & AI
+langgraph==0.0.56
+langchain==0.1.5
+langchain-google-genai==0.0.10
+google-generativeai==0.3.0
+
+# Database
+sqlite3-python==1.0.0
+
+# Utilities
+python-dotenv==1.0.0
+faker==21.0.0
+requests==2.31.0
+aiofiles==23.2.1
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+httpx==0.25.1
+
+# Logging
+python-json-logger==2.0.7
+
+# Security
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# CORS
+python-cors==1.0.0

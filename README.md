@@ -419,7 +419,12 @@ pytest tests/test_api.py -v
 ```
 
 ---
+```bash
+cd backend
+pip install -r requirements.txt
+python database/seed.py
 
+```
 ## 🔒 Security
 
 ✅ **Read-only database access** (no UPDATE/DELETE/INSERT)  
@@ -539,7 +544,21 @@ ADMIN_SECRET_KEY=your_secret
 ```bash
 curl http://localhost:8001/health
 ```
+## 🗄️ Database: SQLite
 
+### Why SQLite?
+- ✅ Zero-configuration (no server needed)
+- ✅ Single file database (easy backup/versioning)
+- ✅ Perfect for development & production
+- ✅ Full support for foreign keys & constraints
+- ✅ Read-only access via MCP (secure)
+
+### Database Initialization
+
+```bash
+cd backend
+python database/seed.py
+```
 ### Issue: "Database not initialized"
 **Solution**: Run seed script
 ```bash
