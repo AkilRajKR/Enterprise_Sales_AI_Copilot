@@ -1,6 +1,6 @@
 import React from 'react';
 import { QueryResponse } from '../services/api';
-import { Check, AlertCircle, Cache, Zap, Clock } from 'lucide-react';
+import { Check, AlertCircle, Database, Zap, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface MessageProps {
@@ -97,7 +97,7 @@ const Message: React.FC<MessageProps> = ({ question, response, isLoading, error 
         {/* Cache Hit */}
         <div className="bg-white border border-gray-200 rounded-lg p-3">
           <div className="text-xs font-semibold text-gray-600 uppercase mb-1 flex items-center gap-1">
-            <Cache className="w-3 h-3" />
+            <Database className="w-3 h-3" />
             Cache
           </div>
           <div className="text-sm font-bold">
