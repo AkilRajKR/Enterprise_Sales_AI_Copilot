@@ -46,9 +46,15 @@ export interface HealthResponse {
 }
 
 export const askQuestion = async (question: string): Promise<QueryResponse> => {
-  const response = await apiClient.post<QueryResponse>('/ask', {
+  console.log("API:", API_BASE_URL);
+  console.log("POST:", API_BASE_URL + "/ask");
+
+  const response = await apiClient.post<QueryResponse>("/ask", {
     question,
   });
+
+  console.log(response.data);
+
   return response.data;
 };
 
@@ -58,7 +64,10 @@ export const getHistory = async (limit: number = 50): Promise<HistoryResponse> =
 };
 
 export const healthCheck = async (): Promise<HealthResponse> => {
-  const response = await apiClient.get<HealthResponse>('/health');
+  console.log("GET:", API_BASE_URL + "/health");
+
+  const response = await apiClient.get<HealthResponse>("/health");
+
   return response.data;
 };
 

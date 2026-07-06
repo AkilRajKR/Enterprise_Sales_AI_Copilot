@@ -85,11 +85,36 @@ function App() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mt-10 max-w-4xl w-full">
                     {[
-                      { icon: '📊', text: 'What are total sales?', desc: 'Revenue Overview' },
-                      { icon: '👥', text: 'How many customers do we have?', desc: 'Customer Count' },
-                      { icon: '🏆', text: 'Which product had the most sales?', desc: 'Top Product' },
-                      { icon: '💰', text: 'What is the average order value?', desc: 'AOV Analysis' },
-                    ].map((sample, idx) => (
+                      {
+                          icon: '👥',
+                          text: 'How many customers are there?',
+                          desc: 'Customer Analytics',
+                        },
+                        {
+                          icon: '🏷️',
+                          text: 'Which brand has the most customers?',
+                          desc: 'Brand Performance',
+                        },
+                        {
+                          icon: '🚗',
+                          text: 'Which model has the highest sales?',
+                          desc: 'Model Performance',
+                        },
+                        {
+                          icon: '🏢',
+                          text: 'Which dealer sold the most vehicles?',
+                          desc: 'Dealer Analytics',
+                        },
+                        {
+                          icon: '🚘',
+                          text: 'How many Toyota vehicles have been sold?',
+                          desc: 'Brand Sales',
+                        },
+                        {
+                          icon: '🏭',
+                          text: 'Which manufacturing plant produced the most vehicles?',
+                          desc: 'Manufacturing Insights',
+                        },].map((sample, idx) => (
                       <button
                         key={idx}
                         onClick={() => setInput(sample.text)}

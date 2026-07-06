@@ -1,8 +1,10 @@
 import os
-import json
 import logging
 import sqlite3
+import socket
+from pathlib import Path
 from typing import Any
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -11,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="SQLite MCP Server")
 
-db_path = os.getenv("DATABASE_PATH", "database/sales.db")
+# Resolve db_path relative to this file so it works from any cwd
+_here   = Path(__file__).resolve().parent.parent  # backend/
+db_path = os.getenv("DATABASE_PATH", str(_here / "database" / "sales.db"))
 
 
 class QueryRequest(BaseModel):
@@ -24,59 +28,80 @@ class QueryResponse(BaseModel):
     error: str = None
 
 
+DANGEROUS_KEYWORDS = [
+    "DROP", "DELETE", "UPDATE", "INSERT",
+    "ALTER", "TRUNCATE", "PRAGMA", "ATTACH", "DETACH",
+]
+
+
+def _find_free_port(preferred: int = 8001) -> int:
+    """Return `preferred` if free, else find the next available port."""
+    for port in range(preferred, preferred + 20):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("0.0.0.0", port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError("No free port found in range 8001-8020")
+
+
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "SQLite MCP"}
+    return {"status": "healthy", "service": "SQLite MCP", "db_path": db_path}
 
 
-@app.post("/execute")
+@app.post("/execute", response_model=QueryResponse)
 async def execute_query(request: QueryRequest):
-    """Execute READ-ONLY SQL query"""
+    """Execute a READ-ONLY SQL query."""
+    query = request.query.strip()
+
+    if not query.upper().startswith("SELECT"):
+        return QueryResponse(success=False, error="Only SELECT queries are allowed")
+
+    query_upper = query.upper()
+    for kw in DANGEROUS_KEYWORDS:
+        if kw in query_upper:
+            return QueryResponse(success=False, error=f"Dangerous keyword detected: {kw}")
+
     try:
-        if not request.query.strip().upper().startswith("SELECT"):
-            return QueryResponse(success=False, error="Only SELECT queries allowed")
-        
-        dangerous_keywords = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE", "PRAGMA"]
-        query_upper = request.query.upper()
-        
-        for keyword in dangerous_keywords:
-            if keyword in query_upper:
-                return QueryResponse(success=False, error=f"Dangerous keyword detected: {keyword}")
-        
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute(request.query)
-        rows = cursor.fetchall()
-        conn.close()
-        
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
         results = [dict(row) for row in rows]
-        logger.info(f"Query executed successfully: {len(results)} rows returned")
-        
+        logger.info(f"[MCP] Query OK — {len(results)} rows returned")
         return QueryResponse(success=True, data=results)
+
     except Exception as e:
-        logger.error(f"Error executing query: {e}")
+        logger.error(f"[MCP] Error executing query: {e}")
         return QueryResponse(success=False, error=str(e))
 
 
 @app.get("/schema")
 async def get_schema():
-    """Get database schema"""
+    """Return all CREATE TABLE statements from the database."""
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table'")
-        tables = cursor.fetchall()
-        conn.close()
-        
-        return {"tables": [table[0] for table in tables if table[0]]}
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+            rows = cursor.fetchall()
+
+        return {"tables": [{"name": r[0], "sql": r[1]} for r in rows if r[1]]}
+
     except Exception as e:
-        logger.error(f"Error retrieving schema: {e}")
+        logger.error(f"[MCP] Error retrieving schema: {e}")
         return {"error": str(e)}
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    port = _find_free_port(8001)
+    if port != 8001:
+        logger.warning(f"Port 8001 was in use — using port {port} instead")
+    logger.info(f"Starting MCP SQLite server on http://0.0.0.0:{port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)

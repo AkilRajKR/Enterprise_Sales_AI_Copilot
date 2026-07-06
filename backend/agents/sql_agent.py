@@ -1,6 +1,8 @@
 import logging
+import os
 import sqlite3
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -12,16 +14,28 @@ class SQLAgent:
     def __init__(self, api_key: str, db_path: str):
         self.db_path = db_path
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
             google_api_key=api_key,
             temperature=0.0,
-            max_tokens=500
+            max_tokens=500,
         )
-        
+
         self.schema = self._get_schema()
-        
+
         self.prompt = ChatPromptTemplate.from_template("""
-You are a SQL expert for sales analytics. Generate ONLY safe SELECT queries.
+Business meaning:
+
+Brands = car manufacturers
+
+Models = cars produced by a brand
+
+Customer_Ownership = completed vehicle sales
+
+Dealer_Brand = brands available at dealers
+
+Car_Vins = every physical car
+
+Customers = buyers
 
 Database Schema:
 {schema}
@@ -39,79 +53,117 @@ Rules:
 4. Use ORDER BY for sorting
 5. Add LIMIT for large result sets
 6. Use aliases for readability
-
-Generate a single, optimized SELECT query.
-Return ONLY the SQL query, no explanation.
+7. Return ONLY the raw SQL query — no markdown, no explanation.
 
 Question: {question}
 """)
-        
+
         self.parser = StrOutputParser()
-        self.dangerous_keywords = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE", "PRAGMA", "ATTACH", "DETACH"]
-    
+        self.dangerous_keywords = [
+            "DROP", "DELETE", "UPDATE", "INSERT",
+            "ALTER", "TRUNCATE", "PRAGMA", "ATTACH", "DETACH",
+        ]
+
+    # ── Schema ────────────────────────────────────────────────────────────────
+
     def _get_schema(self) -> str:
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                SELECT sql FROM sqlite_master 
-                WHERE type='table' AND name NOT LIKE 'sqlite_%'
-                ORDER BY name
-            """)
-            
-            schema_list = [row[0] for row in cursor.fetchall() if row[0]]
-            conn.close()
-            
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT sql FROM sqlite_master
+                    WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                    ORDER BY name
+                """)
+                schema_list = [row[0] for row in cursor.fetchall() if row[0]]
             return "\n\n".join(schema_list)
         except Exception as e:
             logger.error(f"[SQL] Error getting schema: {e}")
             return ""
-    
+
+    # ── SQL generation ────────────────────────────────────────────────────────
+
     def generate_query(self, question: str, intent: Dict[str, Any]) -> str:
-        try:
-            chain = self.prompt | self.llm | self.parser
-            
-            query = chain.invoke({
-                "question": question,
-                "schema": self.schema,
-                "intent_type": intent.get("intent", "unknown"),
-                "tables": intent.get("entities", {}).get("tables", []),
-                "metrics": intent.get("metrics", []),
-                "sql_keywords": intent.get("sql_keywords", [])
-            })
-            
-            # Security check: prevent injection
-            query_upper = query.upper()
-            for keyword in self.dangerous_keywords:
-                if keyword in query_upper:
-                    logger.error(f"[SQL] Dangerous keyword detected: {keyword}")
-                    return None
-            
-            # Ensure it's a SELECT query
-            if not query_upper.strip().startswith("SELECT"):
-                logger.error(f"[SQL] Not a SELECT query")
-                return None
-            
-            logger.info(f"[SQL] Generated: {query[:80]}...")
-            return query
-        except Exception as e:
-            logger.error(f"[SQL] Error generating query: {e}")
-            return None
-    
+        """Generate SQL (no usage tracking — backward compat)."""
+        query, _ = self.generate_query_with_usage(question, intent)
+        return query
+
+    def generate_query_with_usage(
+        self, question: str, intent: Dict[str, Any]
+    ) -> Tuple[str, Dict[str, int]]:
+        """Generate SQL and return (sql_query, token_usage)."""
+        logger.info("=" * 80)
+        logger.info("ENTERED SQL AGENT")
+        logger.info(f"Question : {question}")
+        logger.info(f"Intent   : {intent}")
+        logger.info("=" * 80)
+
+        # Build chain (without parser so we can grab usage metadata)
+        chain_raw = self.prompt | self.llm
+        raw_response = chain_raw.invoke({
+            "question":    question,
+            "schema":      self.schema,
+            "intent_type": intent.get("intent", "unknown"),
+            "tables":      intent.get("entities", {}).get("tables", []),
+            "metrics":     intent.get("metrics", []),
+            "sql_keywords": intent.get("sql_keywords", []),
+        })
+
+        usage = self._extract_usage(raw_response)
+        query = raw_response.content
+
+        # ── Strip markdown fences that Gemini may wrap the SQL in ──────────
+        query = query.strip()
+        for fence in ("```sql", "```"):
+            if query.startswith(fence):
+                query = query[len(fence):]
+        if query.endswith("```"):
+            query = query[:-3]
+        query = query.strip()
+
+        logger.info("=" * 80)
+        logger.info("CLEANED SQL FROM GEMINI")
+        logger.info(query)
+        logger.info("=" * 80)
+
+        return query, usage
+
+    # ── SQL execution ─────────────────────────────────────────────────────────
+
     def execute_query(self, sql_query: str) -> List[Dict[str, Any]]:
+        """Execute a SELECT query and return results as list of dicts."""
+        # Safety check before executing
+        query_upper = sql_query.upper()
+        for kw in self.dangerous_keywords:
+            if kw in query_upper:
+                logger.error(f"[SQL] Dangerous keyword detected: {kw}")
+                return []
+
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            
-            cursor.execute(sql_query)
-            rows = cursor.fetchall()
-            conn.close()
-            
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(sql_query)
+                rows = cursor.fetchall()
+
             results = [dict(row) for row in rows]
             logger.info(f"[SQL] Executed: {len(results)} rows returned")
             return results
+
         except Exception as e:
             logger.error(f"[SQL] Error executing query: {e}")
             return []
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _extract_usage(response) -> Dict[str, int]:
+        usage = {}
+        try:
+            meta = getattr(response, "usage_metadata", None)
+            if meta:
+                usage["input_tokens"]  = getattr(meta, "input_tokens",  0)
+                usage["output_tokens"] = getattr(meta, "output_tokens", 0)
+        except Exception:
+            pass
+        return usage
