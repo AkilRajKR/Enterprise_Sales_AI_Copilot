@@ -1,181 +1,184 @@
-import React from 'react';
-import { QueryResponse } from '../services/api';
-import { Check, AlertCircle, Database, Zap, Clock } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import React, { useState } from 'react';
+import { ChevronDown, Copy, Check } from 'lucide-react';
+
+interface QueryResponse {
+  question: string;
+  answer: string;
+  sql_query: string;
+  evidence: Record<string, any>;
+  confidence: number;
+  cache_hit: boolean;
+  retry_count: number;
+  validation_status: string;
+  execution_time_ms: number;
+  token_usage: Record<string, number>;
+}
 
 interface MessageProps {
-  question?: string;
   response?: QueryResponse;
-  isLoading?: boolean;
   error?: string;
 }
 
-const Message: React.FC<MessageProps> = ({ question, response, isLoading, error }) => {
+const Message: React.FC<MessageProps> = ({ response, error }) => {
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const toggleSection = (section: string) => {
+    const newSet = new Set(expandedSections);
+    if (newSet.has(section)) {
+      newSet.delete(section);
+    } else {
+      newSet.add(section);
+    }
+    setExpandedSections(newSet);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
   if (error) {
     return (
-      <div className="flex gap-3 mb-4">
-        <div className="flex-1">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 text-red-800 font-semibold mb-2">
-              <AlertCircle className="w-5 h-5" />
-              Error
-            </div>
-            <p className="text-red-700">{error}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoading && question) {
-    return (
-      <div className="flex gap-3 mb-4">
-        <div className="flex-1">
-          <div className="bg-gray-50 rounded-lg p-4 mb-2">
-            <p className="text-gray-800 font-semibold">Q: {question}</p>
-          </div>
-          <div className="bg-blue-50 rounded-lg p-4 animate-pulse">
-            <p className="text-blue-600">Thinking...</p>
-          </div>
-        </div>
+      <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 shadow-sm">
+        <p className="text-red-800 font-semibold">Error</p>
+        <p className="text-red-700 text-sm mt-1">{error}</p>
       </div>
     );
   }
 
   if (!response) return null;
 
-  const getValidationColor = () => {
-    if (response.validation_status === 'passed') return 'bg-green-50 border-green-200';
-    if (response.validation_status === 'failed') return 'bg-yellow-50 border-yellow-200';
-    return 'bg-gray-50 border-gray-200';
-  };
-
-  const getConfidenceColor = () => {
-    if (response.confidence >= 0.9) return 'text-green-600';
-    if (response.confidence >= 0.7) return 'text-blue-600';
-    if (response.confidence >= 0.5) return 'text-yellow-600';
-    return 'text-red-600';
-  };
+  const confidenceColor =
+    response.confidence > 0.8 ? 'text-green-600 bg-green-50' :
+    response.confidence > 0.5 ? 'text-yellow-600 bg-yellow-50' :
+    'text-red-600 bg-red-50';
 
   return (
-    <div className="flex flex-col gap-3 mb-4">
-      {/* Question */}
-      <div className="bg-gray-100 rounded-lg p-4">
-        <p className="text-gray-700">
-          <span className="font-semibold text-gray-800">Q:</span> {response.question}
-        </p>
-      </div>
-
-      {/* Answer */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-gray-800">
-          <span className="font-semibold text-blue-800">A:</span> {response.answer}
-        </p>
-      </div>
-
-      {/* Metadata Badges */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {/* Confidence */}
-        <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <div className="text-xs font-semibold text-gray-600 uppercase mb-1">Confidence</div>
-          <div className={`text-lg font-bold ${getConfidenceColor()}`}>
-            {(response.confidence * 100).toFixed(0)}%
-          </div>
-        </div>
-
-        {/* Validation Status */}
-        <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <div className="text-xs font-semibold text-gray-600 uppercase mb-1 flex items-center gap-1">
-            <Check className="w-3 h-3" />
-            Validation
-          </div>
-          <div className="text-sm font-bold text-gray-800 capitalize">
-            {response.validation_status}
-          </div>
-        </div>
-
-        {/* Cache Hit */}
-        <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <div className="text-xs font-semibold text-gray-600 uppercase mb-1 flex items-center gap-1">
-            <Database className="w-3 h-3" />
-            Cache
-          </div>
-          <div className="text-sm font-bold">
-            <span className={response.cache_hit ? 'text-green-600' : 'text-gray-600'}>
-              {response.cache_hit ? 'HIT' : 'MISS'}
+    <div className="space-y-3 animate-slideInRight">
+      <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-5 shadow-sm">
+        <p className="text-slate-800 leading-relaxed">{response.answer}</p>
+        
+        <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-indigo-200">
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${confidenceColor}`}>
+            Confidence: {(response.confidence * 100).toFixed(0)}%
+          </span>
+          {response.cache_hit && (
+            <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-xs font-semibold">
+              ⚡ From Cache
             </span>
-          </div>
-        </div>
-
-        {/* Execution Time */}
-        <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <div className="text-xs font-semibold text-gray-600 uppercase mb-1 flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            Time
-          </div>
-          <div className="text-sm font-bold text-gray-800">
-            {response.execution_time_ms.toFixed(0)}ms
-          </div>
+          )}
+          {response.validation_status === 'passed' && (
+            <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold">
+              ✓ Validated
+            </span>
+          )}
+          <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-semibold">
+            {response.execution_time_ms}ms
+          </span>
         </div>
       </div>
 
-      {/* Retry Count */}
-      {response.retry_count > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-          <p className="text-sm text-yellow-800">
-            <span className="font-semibold">Note:</span> This query required {response.retry_count} retry attempt(s) to validate.
-          </p>
-        </div>
-      )}
-
-      {/* SQL Query (Expandable) */}
-      <details className="bg-gray-50 border border-gray-200 rounded-lg">
-        <summary className="p-4 cursor-pointer hover:bg-gray-100 flex items-center gap-2 font-semibold text-gray-700">
-          <span>📊 SQL Query</span>
-        </summary>
-        <div className="border-t border-gray-200 p-4 bg-gray-900 rounded-b-lg">
-          <code className="text-green-400 text-sm font-mono break-words">
-            {response.sql_query}
-          </code>
-        </div>
-      </details>
-
-      {/* Evidence */}
-      {Object.keys(response.evidence).length > 0 && (
-        <details className="bg-gray-50 border border-gray-200 rounded-lg">
-          <summary className="p-4 cursor-pointer hover:bg-gray-100 flex items-center gap-2 font-semibold text-gray-700">
-            <span>📈 Evidence</span>
-          </summary>
-          <div className="border-t border-gray-200 p-4">
-            <div className="bg-white rounded p-3 font-mono text-sm text-gray-700 overflow-x-auto">
-              <pre>{JSON.stringify(response.evidence, null, 2)}</pre>
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <button
+          onClick={() => toggleSection('sql')}
+          className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition"
+        >
+          <span className="font-semibold text-slate-900 flex items-center space-x-2">
+            <span className="text-lg">🔍</span>
+            <span>Generated SQL Query</span>
+          </span>
+          <ChevronDown
+            className={`w-5 h-5 text-slate-600 transition-transform ${
+              expandedSections.has('sql') ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+        {expandedSections.has('sql') && (
+          <div className="px-5 py-3 border-t border-slate-200 bg-slate-50">
+            <div className="relative">
+              <pre className="text-xs text-slate-700 bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto">
+                <code>{response.sql_query}</code>
+              </pre>
+              <button
+                onClick={() => copyToClipboard(response.sql_query)}
+                className="absolute top-2 right-2 p-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+              >
+                {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </button>
             </div>
           </div>
-        </details>
+        )}
+      </div>
+
+      {Object.keys(response.evidence).length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          <button
+            onClick={() => toggleSection('evidence')}
+            className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition"
+          >
+            <span className="font-semibold text-slate-900 flex items-center space-x-2">
+              <span className="text-lg">📊</span>
+              <span>Evidence & Data</span>
+            </span>
+            <ChevronDown
+              className={`w-5 h-5 text-slate-600 transition-transform ${
+                expandedSections.has('evidence') ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+          {expandedSections.has('evidence') && (
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50">
+              <div className="grid grid-cols-2 gap-3">
+                {Object.entries(response.evidence).map(([key, value]) => (
+                  <div key={key} className="bg-white p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-600 font-semibold uppercase tracking-wide">{key}</p>
+                    <p className="text-lg font-bold text-slate-900 mt-1">{String(value)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Token Usage */}
-      {Object.keys(response.token_usage).length > 0 && (
-        <details className="bg-gray-50 border border-gray-200 rounded-lg">
-          <summary className="p-4 cursor-pointer hover:bg-gray-100 flex items-center gap-2 font-semibold text-gray-700">
-            <Zap className="w-4 h-4" />
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <button
+          onClick={() => toggleSection('tokens')}
+          className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition"
+        >
+          <span className="font-semibold text-slate-900 flex items-center space-x-2">
+            <span className="text-lg">🪙</span>
             <span>Token Usage</span>
-          </summary>
-          <div className="border-t border-gray-200 p-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {Object.entries(response.token_usage).map(([key, value]) => (
-                <div key={key} className="bg-white border border-gray-200 rounded p-2">
-                  <div className="text-xs text-gray-600 capitalize">{key.replace(/_/g, ' ')}</div>
-                  <div className="text-sm font-bold text-gray-800">{value}</div>
+          </span>
+          <ChevronDown
+            className={`w-5 h-5 text-slate-600 transition-transform ${
+              expandedSections.has('tokens') ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+        {expandedSections.has('tokens') && (
+          <div className="px-5 py-3 border-t border-slate-200 bg-slate-50">
+            <div className="space-y-2">
+              {Object.entries(response.token_usage).map(([agent, tokens]) => (
+                <div key={agent} className="flex justify-between text-sm">
+                  <span className="text-slate-600 capitalize">{agent}:</span>
+                  <span className="font-semibold text-slate-900">{tokens} tokens</span>
                 </div>
               ))}
-            </div>
-            <div className="mt-3 pt-3 border-t border-gray-200 font-semibold text-gray-700">
-              Total: {Object.values(response.token_usage).reduce((a, b) => a + (b || 0), 0)} tokens
+              <div className="border-t border-slate-300 pt-2 mt-2">
+                <div className="flex justify-between text-sm font-bold">
+                  <span className="text-slate-700">Total:</span>
+                  <span className="text-indigo-600">
+                    {Object.values(response.token_usage).reduce((a, b) => a + b, 0)} tokens
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </details>
-      )}
+        )}
+      </div>
     </div>
   );
 };

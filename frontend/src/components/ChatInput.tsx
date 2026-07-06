@@ -1,53 +1,56 @@
 import React from 'react';
-import { MessageSquare, Send, Loader } from 'lucide-react';
+import { Send, Loader } from 'lucide-react';
 
 interface ChatInputProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
   isLoading: boolean;
-  disabled?: boolean;
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({
-  value,
-  onChange,
-  onSubmit,
-  isLoading,
-  disabled = false,
-}) => {
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isLoading && !disabled) {
+const ChatInput: React.FC<ChatInputProps> = ({ value, onChange, onSubmit, isLoading }) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSubmit();
     }
   };
 
   return (
-    <div className="border-t border-gray-200 bg-white p-4">
-      <div className="flex gap-3">
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Ask about sales, customers, products, or employees..."
-          disabled={isLoading || disabled}
-          className="flex-1 p-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-          rows={3}
-        />
-        <button
-          onClick={onSubmit}
-          disabled={isLoading || disabled || !value.trim()}
-          className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
-        >
-          {isLoading ? (
-            <Loader className="w-5 h-5 animate-spin" />
-          ) : (
-            <Send className="w-5 h-5" />
-          )}
-        </button>
+    <div className="bg-white border-t border-slate-200 p-4 shadow-lg">
+      <div className="max-w-5xl mx-auto w-full">
+        <div className="flex space-x-3">
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask me anything about your sales data..."
+            disabled={isLoading}
+            className="flex-1 px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-indigo-500 focus:bg-white transition disabled:opacity-50 placeholder-slate-400 text-slate-900"
+          />
+          <button
+            onClick={onSubmit}
+            disabled={isLoading || !value.trim()}
+            className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl font-semibold hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-all duration-200 flex items-center space-x-2"
+          >
+            {isLoading ? (
+              <>
+                <Loader className="w-4 h-4 animate-spin" />
+                <span>Analyzing...</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" />
+                <span>Ask</span>
+              </>
+            )}
+          </button>
+        </div>
+        <p className="text-xs text-slate-500 mt-2 ml-1">
+          💡 Tip: Press Shift+Enter for new line
+        </p>
       </div>
-      <p className="text-sm text-gray-500 mt-2">Press Shift+Enter for new line, Enter to send</p>
     </div>
   );
 };

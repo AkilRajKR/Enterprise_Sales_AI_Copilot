@@ -1,54 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, CheckCircle, Wifi, WifiOff } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { healthCheck } from '../services/api';
 
 const StatusBar: React.FC = () => {
-  const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
-  const [lastCheck, setLastCheck] = useState<Date | null>(null);
+  const [status, setStatus] = useState<'healthy' | 'checking' | 'unhealthy'>('checking');
 
   useEffect(() => {
-    const check = async () => {
-      try {
-        await healthCheck();
-        setIsHealthy(true);
-      } catch (error) {
-        setIsHealthy(false);
-      }
-      setLastCheck(new Date());
-    };
-
-    check();
-    const interval = setInterval(check, 30000); // Check every 30 seconds
-
+    checkHealthStatus();
+    const interval = setInterval(checkHealthStatus, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  if (isHealthy === null) return null;
+  const checkHealthStatus = async () => {
+    try {
+      const response = await healthCheck();
+      setStatus(response.status === 'healthy' ? 'healthy' : 'unhealthy');
+    } catch {
+      setStatus('unhealthy');
+    }
+  };
+
+  const statusConfig = {
+    healthy: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', label: 'API Healthy' },
+    checking: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', label: 'Checking...' },
+    unhealthy: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', label: 'API Unavailable' },
+  };
+
+  const config = statusConfig[status];
 
   return (
-    <div
-      className={`p-3 text-sm flex items-center gap-2 ${
-        isHealthy
-          ? 'bg-green-50 border-b border-green-200 text-green-700'
-          : 'bg-red-50 border-b border-red-200 text-red-700'
-      }`}
-    >
-      {isHealthy ? (
-        <>
-          <CheckCircle className="w-4 h-4" />
-          <span>API is healthy</span>
-        </>
-      ) : (
-        <>
-          <AlertCircle className="w-4 h-4" />
-          <span>API is unavailable</span>
-        </>
-      )}
-      {lastCheck && (
-        <span className="text-xs ml-auto opacity-75">
-          Last checked {lastCheck.toLocaleTimeString()}
-        </span>
-      )}
+    <div className={`${config.bg} border-b ${config.border} px-4 py-2`}>
+      <div className="max-w-7xl mx-auto flex items-center space-x-2">
+        <Activity className={`w-4 h-4 ${config.text}`} />
+        <span className={`text-sm font-medium ${config.text}`}>{config.label}</span>
+        {status === 'checking' && <span className="inline-block animate-spin">⟳</span>}
+      </div>
     </div>
   );
 };
