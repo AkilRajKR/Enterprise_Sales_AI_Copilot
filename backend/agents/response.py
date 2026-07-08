@@ -2,21 +2,18 @@ import logging
 import os
 from typing import Dict, Any, Tuple
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from agents.llm_factory import invoke_with_fallback
 
 logger = logging.getLogger(__name__)
 
 
 class ResponseAgent:
     def __init__(self, api_key: str):
-        self.llm = ChatGoogleGenerativeAI(
-            model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-            google_api_key=api_key,
-            temperature=0.3,
-            max_tokens=1000,
-        )
+        self.api_key     = api_key
+        self.temperature = 0.3
+        self.max_tokens  = int(os.getenv("RESPONSE_MAX_TOKENS", 1000))
 
         self.prompt = ChatPromptTemplate.from_template("""
 You are an Automotive Sales Business Analyst. Create a clear, business-friendly answer.
@@ -49,13 +46,15 @@ Answer:
     ) -> Tuple[str, Dict[str, int]]:
         """Generate NL response and return (answer, token_usage)."""
         try:
-            chain_raw   = self.prompt | self.llm
-            data_str    = str(sql_results)[:2000]
+            data_str = str(sql_results)[:2000]
 
-            raw_response = chain_raw.invoke({
-                "question": question,
-                "data":     data_str,
-            })
+            raw_response, _model = invoke_with_fallback(
+                chain_builder=lambda llm: self.prompt | llm,
+                invoke_kwargs={"question": question, "data": data_str},
+                api_key=self.api_key,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
 
             usage  = self._extract_usage(raw_response)
             answer = raw_response.content.strip()

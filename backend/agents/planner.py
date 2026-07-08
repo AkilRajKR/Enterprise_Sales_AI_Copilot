@@ -3,20 +3,17 @@ import logging
 import os
 from typing import Dict, Any, Tuple
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
+from agents.llm_factory import invoke_with_fallback
 
 logger = logging.getLogger(__name__)
 
 
 class PlannerAgent:
     def __init__(self, api_key: str):
-        self.llm = ChatGoogleGenerativeAI(
-            model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-            google_api_key=api_key,
-            temperature=0.1,
-            max_tokens=300,
-        )
+        self.api_key    = api_key
+        self.temperature = 0.1
+        self.max_tokens  = int(os.getenv("PLANNER_MAX_TOKENS", 300))
 
         self.prompt = ChatPromptTemplate.from_template(
             """
@@ -107,8 +104,13 @@ User Question:
     ) -> Tuple[Dict[str, Any], Dict[str, int]]:
         """Classify the question and return (planner_output, token_usage)."""
         try:
-            chain    = self.prompt | self.llm
-            response = chain.invoke({"question": question})
+            response, _model = invoke_with_fallback(
+                chain_builder=lambda llm: self.prompt | llm,
+                invoke_kwargs={"question": question},
+                api_key=self.api_key,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
 
             logger.info("=" * 80)
             logger.info("RAW GEMINI RESPONSE (Planner)")

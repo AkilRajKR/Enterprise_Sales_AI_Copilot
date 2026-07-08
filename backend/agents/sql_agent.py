@@ -3,22 +3,19 @@ import os
 import sqlite3
 from typing import List, Dict, Any, Tuple
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from agents.llm_factory import invoke_with_fallback
 
 logger = logging.getLogger(__name__)
 
 
 class SQLAgent:
     def __init__(self, api_key: str, db_path: str):
-        self.db_path = db_path
-        self.llm = ChatGoogleGenerativeAI(
-            model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-            google_api_key=api_key,
-            temperature=0.0,
-            max_tokens=500,
-        )
+        self.db_path     = db_path
+        self.api_key     = api_key
+        self.temperature = 0.0
+        self.max_tokens  = int(os.getenv("SQL_MAX_TOKENS", 500))
 
         self.schema = self._get_schema()
 
@@ -99,15 +96,20 @@ Question: {question}
         logger.info("=" * 80)
 
         # Build chain (without parser so we can grab usage metadata)
-        chain_raw = self.prompt | self.llm
-        raw_response = chain_raw.invoke({
-            "question":    question,
-            "schema":      self.schema,
-            "intent_type": intent.get("intent", "unknown"),
-            "tables":      intent.get("entities", {}).get("tables", []),
-            "metrics":     intent.get("metrics", []),
-            "sql_keywords": intent.get("sql_keywords", []),
-        })
+        raw_response, _model = invoke_with_fallback(
+            chain_builder=lambda llm: self.prompt | llm,
+            invoke_kwargs={
+                "question":    question,
+                "schema":      self.schema,
+                "intent_type": intent.get("intent", "unknown"),
+                "tables":      intent.get("entities", {}).get("tables", []),
+                "metrics":     intent.get("metrics", []),
+                "sql_keywords": intent.get("sql_keywords", []),
+            },
+            api_key=self.api_key,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
 
         usage = self._extract_usage(raw_response)
         query = raw_response.content

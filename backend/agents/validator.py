@@ -2,9 +2,9 @@ import logging
 import os
 from typing import Dict, Any, List, Tuple
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
+from agents.llm_factory import invoke_with_fallback
 import json
 
 logger = logging.getLogger(__name__)
@@ -12,12 +12,9 @@ logger = logging.getLogger(__name__)
 
 class ValidatorAgent:
     def __init__(self, api_key: str):
-        self.llm = ChatGoogleGenerativeAI(
-            model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-            google_api_key=api_key,
-            temperature=0.0,
-            max_tokens=500,
-        )
+        self.api_key     = api_key
+        self.temperature = 0.0
+        self.max_tokens  = int(os.getenv("VALIDATOR_MAX_TOKENS", 500))
 
         self.prompt = ChatPromptTemplate.from_template("""
 You are a data validation expert for an Automotive Sales Business.
@@ -78,24 +75,27 @@ Respond with ONLY valid JSON (no markdown fences):
     ) -> Tuple[Dict[str, Any], Dict[str, int]]:
         """Validate results and return (validation_dict, token_usage)."""
         try:
-            # Build raw chain (skip JsonOutputParser to capture usage_metadata)
-            chain_raw = self.prompt | self.llm
-
-            # Format results safely
-            preview   = sql_results[:10]
-            extra     = len(sql_results) - 10
+            # Format results safely before building the invoke kwargs
+            preview     = sql_results[:10]
+            extra       = len(sql_results) - 10
             results_str = json.dumps(preview, default=str)
             if extra > 0:
                 results_str += f"\n(... and {extra} more rows)"
 
-            raw_response = chain_raw.invoke({
-                "question":    question,
-                "intent":      intent.get("intent", "unknown"),
-                "entities":    intent.get("entities", {}),
-                "metrics":     intent.get("metrics", []),
-                "sql_query":   sql_query,
-                "sql_results": results_str[:2000],
-            })
+            raw_response, _model = invoke_with_fallback(
+                chain_builder=lambda llm: self.prompt | llm,
+                invoke_kwargs={
+                    "question":    question,
+                    "intent":      intent.get("intent", "unknown"),
+                    "entities":    intent.get("entities", {}),
+                    "metrics":     intent.get("metrics", []),
+                    "sql_query":   sql_query,
+                    "sql_results": results_str[:2000],
+                },
+                api_key=self.api_key,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
 
             usage   = self._extract_usage(raw_response)
             content = raw_response.content.strip()
