@@ -128,6 +128,7 @@ async def ask_question(request: QuestionRequest):
             ),
             execution_time_ms=round(result.get("execution_time_ms", 0), 2),
             token_usage=result.get("token_usage", {}),
+            privacy_blocked=result.get("privacy_blocked", False),
         )
 
     except Exception as e:

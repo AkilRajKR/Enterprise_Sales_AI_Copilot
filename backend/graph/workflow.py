@@ -9,6 +9,7 @@ from agents.sql_agent import SQLAgent
 from agents.validator import ValidatorAgent
 from agents.response import ResponseAgent
 from agents.cache import CacheAgent
+from agents.privacy_guard import is_pii_question, get_block_response, scrub_pii_from_results
 from dotenv import load_dotenv
 import time
 
@@ -73,7 +74,28 @@ def plan_node(state: SalesState) -> SalesState:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 2 — Relevance check
+# Node 2 — Privacy guard
+# ─────────────────────────────────────────────────────────────────────────────
+def privacy_guard_node(state: SalesState) -> SalesState:
+    """Block queries that request personal customer data (PII)."""
+    if not state.get("is_relevant", True):
+        return state
+
+    blocked, reason = is_pii_question(state["user_question"])
+    if blocked:
+        logger.warning(f"[PRIVACY] Query blocked — PII pattern: {reason!r}")
+        block = get_block_response()
+        state["final_answer"]      = block["final_answer"]
+        state["confidence"]        = block["confidence"]
+        state["validation_status"] = block["validation_status"]
+        state["is_relevant"]       = False   # short-circuit the rest of the pipeline
+    else:
+        logger.info("[PRIVACY] Query passed privacy check.")
+    return state
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Node 3 — Relevance check
 # ─────────────────────────────────────────────────────────────────────────────
 def relevance_check_node(state: SalesState) -> SalesState:
     """Gate irrelevant questions with a friendly message."""
@@ -185,6 +207,10 @@ def sql_execution_node(state: SalesState) -> SalesState:
         logger.info("=" * 80)
 
         results = sql_agent.execute_query(state["sql_query"])
+
+        # ── Scrub PII columns from raw SQL results ───────────────────────────
+        results = scrub_pii_from_results(results)
+
         state["sql_result"] = results
 
         logger.info(f"[SQL_EXEC] Rows returned: {len(results)}")
@@ -342,6 +368,7 @@ def create_sales_workflow():
 
     # Register nodes
     workflow.add_node("plan",              plan_node)
+    workflow.add_node("privacy_guard",     privacy_guard_node)
     workflow.add_node("relevance_check",   relevance_check_node)
     workflow.add_node("cache_lookup",      cache_lookup_node)
     workflow.add_node("sql_generation",    sql_generation_node)
@@ -351,7 +378,8 @@ def create_sales_workflow():
     workflow.add_node("cache_store",       cache_store_node)
 
     # Linear edges
-    workflow.add_edge("plan",            "relevance_check")
+    workflow.add_edge("plan",            "privacy_guard")
+    workflow.add_edge("privacy_guard",   "relevance_check")
     workflow.add_edge("relevance_check", "cache_lookup")
 
     # ✅ Skip SQL pipeline when cache hits or question is irrelevant

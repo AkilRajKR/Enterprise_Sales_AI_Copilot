@@ -18,6 +18,7 @@ class QueryResponse(BaseModel):
     validation_status: str
     execution_time_ms: float
     token_usage: Dict[str, int]
+    privacy_blocked: bool = False
 
 
 class HealthResponse(BaseModel):

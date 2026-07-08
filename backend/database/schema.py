@@ -173,7 +173,7 @@ def init_database(db_path: str = "database/sales.db") -> None:
         conn.execute(_QA_CACHE_DDL)
         conn.commit()
 
-    logger.info(f"✅ Automotive database schema verified at: {db_path}")
+    logger.info(f"Automotive database schema verified at: {db_path}")
 
 
 if __name__ == "__main__":

@@ -1,27 +1,77 @@
-import React from 'react';
-import { Activity, Settings } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Activity, Clock, Shield } from 'lucide-react';
+import { healthCheck } from '../services/api';
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  apiStatus: 'healthy' | 'checking' | 'unhealthy';
+}
+
+const Header: React.FC<HeaderProps> = ({ apiStatus }) => {
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const fmt = (d: Date) =>
+    d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
   return (
-    <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-lg flex items-center justify-center">
-            <Activity className="w-6 h-6 text-white" />
+    <header style={{ background: 'var(--header-bg)', borderBottom: '1px solid var(--border)' }}
+      className="flex items-center justify-between px-6 py-3 z-50 flex-shrink-0">
+
+      {/* Left: Logo */}
+      <div className="flex items-center gap-3">
+        <div style={{
+          background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
+          borderRadius: 10, width: 38, height: 38,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 0 18px rgba(14,165,233,0.35)'
+        }}>
+          <Activity size={20} color="#fff" />
+        </div>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+            Sales AI
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Sales AI</h1>
-            <p className="text-xs text-slate-500">Enterprise Analytics Platform</p>
+          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--accent-cyan)', textTransform: 'uppercase' }}>
+            Automotive Intelligence Platform
           </div>
         </div>
+      </div>
 
-        <div className="flex items-center space-x-4">
-          <button className="p-2 hover:bg-slate-100 rounded-lg transition">
-            <Settings className="w-5 h-5 text-slate-600" />
-          </button>
-          <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center cursor-pointer hover:shadow-lg transition">
-            <span className="text-white font-bold text-sm">AI</span>
-          </div>
+      {/* Center: Title */}
+      <div className="flex items-center gap-2" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '2px', textTransform: 'uppercase' }}>
+          AI Analytics Copilot
+        </span>
+      </div>
+
+      {/* Right: Session + Status + Badge */}
+      <div className="flex items-center gap-4">
+        {/* Privacy shield icon */}
+        <div className="flex items-center gap-1" title="Privacy guard active">
+          <Shield size={14} color="var(--success)" />
+          <span style={{ fontSize: 10, color: 'var(--success)', fontWeight: 600 }}>Privacy Active</span>
+        </div>
+
+        {/* API Status */}
+        <div className="flex items-center gap-2">
+          <span className={`status-dot ${apiStatus}`} />
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
+            Session · {fmt(time)}
+          </span>
+        </div>
+
+        {/* Company Badge */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0,212,255,0.15), rgba(59,130,246,0.15))',
+          border: '1px solid rgba(0,212,255,0.3)',
+          borderRadius: 8, padding: '5px 12px',
+          fontSize: 12, fontWeight: 700, color: 'var(--accent-cyan)'
+        }}>
+          Allianz Sales
         </div>
       </div>
     </header>
