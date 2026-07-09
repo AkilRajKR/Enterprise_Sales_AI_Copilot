@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
-import { BarChart2, Database, Copy, Check, Zap } from 'lucide-react';
+import { BarChart2, Database, Copy, Check, Zap, AlertCircle } from 'lucide-react';
 import { QueryResponse } from '../services/api';
+
+const ERROR_STATUSES = new Set([
+  'quota_exceeded', 'timeout', 'connection_error',
+  'auth_error', 'sql_error', 'system_error',
+  'needs_clarification',
+]);
 
 interface VisualizationPanelProps {
   response: QueryResponse | null;
@@ -109,6 +115,39 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ response, isLoa
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
             Generated SQL will appear here — paired with the chart above.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Error state — show friendly placeholder, no chart ── */
+  if (response && ERROR_STATUSES.has(response.validation_status)) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <div className="panel-header">
+          <Zap size={16} color="var(--accent-cyan)" />
+          <span className="panel-header-title">Data Visualization</span>
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28 }}>
+          <div style={{
+            width: 56, height: 56,
+            background: 'rgba(100,116,139,0.1)', border: '1px solid var(--border)',
+            borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            marginBottom: 16,
+          }}>
+            <AlertCircle size={26} color="var(--text-muted)" />
+          </div>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', lineHeight: 1.6 }}>
+            No chart data available for this response.
+          </p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 11, textAlign: 'center', marginTop: 6, opacity: 0.6 }}>
+            See the AI Response panel on the right for details.
+          </p>
+        </div>
+        <div style={{ borderTop: '1px solid var(--border)', padding: 14 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+            No SQL was generated for this request.
           </p>
         </div>
       </div>

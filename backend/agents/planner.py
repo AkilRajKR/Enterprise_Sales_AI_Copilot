@@ -13,68 +13,64 @@ class PlannerAgent:
     def __init__(self, api_key: str):
         self.api_key    = api_key
         self.temperature = 0.1
-        self.max_tokens  = int(os.getenv("PLANNER_MAX_TOKENS", 300))
+        self.max_tokens  = int(os.getenv("PLANNER_MAX_TOKENS", 400))
 
         self.prompt = ChatPromptTemplate.from_template(
             """
 You are the Planning Agent of an Enterprise Automotive Sales Analytics System.
 
-Your job is ONLY to understand the user's request.
+Your ONLY job is to classify the user's question.
 
-Database Tables
+=== AVAILABLE DATABASE TABLES ===
+- Brands            (vehicle manufacturers)
+- Models            (vehicle models per brand)
+- Dealers           (dealerships)
+- Customers         (buyers — NO personal data like name, DOB, salary)
+- Customer_Ownership (completed vehicle sales)
+- Car_Vins          (individual vehicles)
+- Car_Parts         (vehicle parts)
+- Car_Options       (optional accessories)
+- Dealer_Brand      (brands available at dealers)
+- Manufacture_Plant (manufacturing plants)
 
-- Brands
-- Models
-- Dealers
-- Customers
-- Customer_Ownership
-- Car_Vins
-- Car_Parts
-- Car_Options
-- Dealer_Brand
-- Manufacture_Plant
+=== STRICT RULES — READ CAREFULLY ===
 
-Business Meaning
+RULE 1 — NEVER ASSUME:
+  If the question is vague, ambiguous, or you are not 100% sure what data is needed,
+  set "needs_clarification": true and fill "clarification_questions" with 1–3 short
+  plain-English questions that will help you understand exactly what the user wants.
+  DO NOT guess. DO NOT invent intent.
 
-Brands = Vehicle manufacturers
+RULE 2 — NO PERSONAL DATA:
+  If the question asks for individual personal details (customer name, DOB, address,
+  salary, phone, email, passport, bank info), set "is_relevant": false and
+  "rejection_reason": "privacy".
 
-Models = Vehicle models
+RULE 3 — SCOPE:
+  Only answer questions about automotive sales, brands, models, dealers, vehicles,
+  manufacturing. If totally off-topic (e.g. weather, recipes), set "is_relevant": false
+  and "rejection_reason": "off_topic".
 
-Customers = Buyers
+RULE 4 — FORMAT:
+  Return JSON ONLY. No markdown. No explanation.
+  First character must be {{ and last must be }}.
 
-Customer_Ownership = Vehicle sales
+=== CLARIFICATION EXAMPLES ===
+Question: "show me the data"
+→ needs_clarification: true, questions: ["Which data would you like to see — brands, models, dealers, or sales?", "Do you want totals or a breakdown by a specific category?"]
 
-Dealers = Dealerships
+Question: "how is it performing?"
+→ needs_clarification: true, questions: ["Which entity are you asking about — a specific brand, model, or dealer?", "What time period should I look at?"]
 
-Dealer_Brand = Brands sold by dealers
+Question: "give me everything"
+→ needs_clarification: true, questions: ["Everything is a very broad request. Could you specify which area — sales counts, dealer rankings, brand performance?"]
 
-Car_Vins = Individual vehicles
-
-Car_Parts = Vehicle parts
-
-Car_Options = Optional accessories
-
-Manufacture_Plant = Manufacturing plants
-
-Rules
-
-1. Assume every question is about this database.
-2. Never reject a question.
-3. Determine:
-   - business intent
-   - tables involved
-   - metrics
-   - SQL keywords
-4. Return JSON ONLY.
-5. Do NOT explain anything.
-6. Do NOT use Markdown.
-7. First character must be {{
-8. Last character must be }}
-
-Return EXACTLY this structure:
-
+=== OUTPUT SCHEMA ===
 {{
     "is_relevant": true,
+    "needs_clarification": false,
+    "clarification_questions": [],
+    "rejection_reason": "",
     "intent": "",
     "entities": {{
         "tables": [],
@@ -87,7 +83,6 @@ Return EXACTLY this structure:
 }}
 
 User Question:
-
 {question}
 """
         )
@@ -117,9 +112,7 @@ User Question:
             logger.info(response.content)
             logger.info("=" * 80)
 
-            # Extract token usage from metadata
             usage = self._extract_usage(response)
-
             content = response.content.strip()
 
             # Strip markdown fences if Gemini wraps the JSON
@@ -133,6 +126,9 @@ User Question:
             result = json.loads(content)
 
             result.setdefault("is_relevant", True)
+            result.setdefault("needs_clarification", False)
+            result.setdefault("clarification_questions", [])
+            result.setdefault("rejection_reason", "")
             result.setdefault("intent", "general_analysis")
             result.setdefault(
                 "entities",
@@ -145,19 +141,27 @@ User Question:
 
             logger.info(
                 f"[PLANNER] Intent={result['intent']} | "
+                f"NeedsClarification={result['needs_clarification']} | "
                 f"Tables={result['entities'].get('tables', [])}"
             )
             return result, usage
 
         except Exception as e:
             logger.exception("[PLANNER] Planner failed")
+            # On LLM failure do NOT assume — ask for clarification
             fallback = {
                 "is_relevant": True,
-                "intent": "general_analysis",
+                "needs_clarification": True,
+                "clarification_questions": [
+                    "I had trouble understanding your question. Could you rephrase it?",
+                    "Please be specific about which data you want — e.g. brand, model, dealer, or sales count.",
+                ],
+                "rejection_reason": "",
+                "intent": "unknown",
                 "entities": {"tables": [], "filters": {}, "aggregations": []},
                 "metrics": [],
                 "sql_keywords": [],
-                "confidence": 0.5,
+                "confidence": 0.0,
                 "normalized_question": self._normalize_question(question),
             }
             return fallback, {}

@@ -12,22 +12,43 @@ logger = logging.getLogger(__name__)
 class ResponseAgent:
     def __init__(self, api_key: str):
         self.api_key     = api_key
-        self.temperature = 0.3
-        self.max_tokens  = int(os.getenv("RESPONSE_MAX_TOKENS", 1000))
+        self.temperature = 0.2
+        self.max_tokens  = int(os.getenv("RESPONSE_MAX_TOKENS", 800))
 
         self.prompt = ChatPromptTemplate.from_template("""
-You are an Automotive Sales Business Analyst. Create a clear, business-friendly answer.
+You are an Automotive Sales Business Analyst writing responses for non-technical stakeholders.
 
-Question: {question}
-Data: {data}
+Question asked: {question}
+Data returned from the database: {data}
 
-Guidelines:
-1. Directly answer the question in the first sentence.
-2. Include the key numbers and metrics from the data.
-3. Write for non-technical stakeholders — no SQL jargon.
-4. Keep it concise: 2–4 sentences maximum.
-5. Never fabricate or assume data that isn't in the provided results.
-6. If results are empty, say so clearly.
+=== STRICT RULES — NEVER VIOLATE ===
+
+RULE 1 — NEVER ASSUME OR INVENT DATA:
+  Only use numbers and facts that are present in the Data section above.
+  If the data is empty or missing, tell the user clearly what is missing.
+  Do NOT make up numbers, estimates, or conclusions that aren't in the data.
+
+RULE 2 — NEVER USE TECHNICAL LANGUAGE:
+  Do not mention SQL, databases, tables, joins, queries, or any technical term.
+  Write as if explaining to a business manager who has never heard of SQL.
+
+RULE 3 — IF DATA IS EMPTY:
+  Say exactly what happened in plain English. For example:
+  "The database did not return any results for this question.
+   This may mean no records match those criteria, or the question may need
+   to be more specific. Please try rephrasing your question."
+  Do NOT assume why the data is empty or invent a reason.
+
+RULE 4 — IF YOU ARE UNSURE:
+  If the data provided is ambiguous and you cannot give a confident answer,
+  say: "I need more information to answer this accurately. Could you clarify [specific thing]?"
+  Do NOT guess.
+
+RULE 5 — FORMAT:
+  - First sentence: directly answer the question (or say data is unavailable).
+  - Then 2-3 sentences with key numbers or context from the data.
+  - Maximum 4 sentences total.
+  - No bullet points. Plain paragraph only.
 
 Answer:
 """)
@@ -46,7 +67,8 @@ Answer:
     ) -> Tuple[str, Dict[str, int]]:
         """Generate NL response and return (answer, token_usage)."""
         try:
-            data_str = str(sql_results)[:2000]
+            # Limit data sent to LLM to avoid context overflow
+            data_str = str(sql_results)[:3000] if sql_results else "No data returned."
 
             raw_response, _model = invoke_with_fallback(
                 chain_builder=lambda llm: self.prompt | llm,
@@ -64,7 +86,13 @@ Answer:
 
         except Exception as e:
             logger.error(f"[RESPONSE] Error generating response: {e}")
-            return "Unable to generate a response at this time.", {}
+            # On failure, return honest human-readable message — no assumptions
+            return (
+                "The system was unable to generate a response at this time. "
+                "This is a temporary issue, not a problem with your question. "
+                "Please try again in a moment.",
+                {},
+            )
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

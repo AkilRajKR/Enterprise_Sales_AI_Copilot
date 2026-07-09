@@ -60,14 +60,39 @@ def plan_node(state: SalesState) -> SalesState:
     logger.info("=" * 80)
 
     state["planner_output"] = planner_output
-    state["is_relevant"]    = planner_output.get("is_relevant", True)  # use Gemini's decision
+    state["is_relevant"]    = planner_output.get("is_relevant", True)
 
-    # Accumulate real token usage
     state["token_usage"]["planner_input"]  = usage.get("input_tokens", 0)
     state["token_usage"]["planner_output"] = usage.get("output_tokens", 0)
 
+    # ── Clarification needed — short-circuit the pipeline immediately ─────────
+    if planner_output.get("needs_clarification"):
+        questions = planner_output.get("clarification_questions", [])
+        if questions:
+            q_list = "\n".join(f"  • {q}" for q in questions)
+            clarification_msg = (
+                "I need a little more information to answer your question accurately.\n\n"
+                "Could you please clarify:\n"
+                + q_list +
+                "\n\nOnce you provide these details, I'll be able to give you a precise answer."
+            )
+        else:
+            clarification_msg = (
+                "Your question is a bit unclear for me to answer accurately.\n"
+                "Could you please be more specific? For example:\n"
+                "  • Which entity do you want to analyse — a brand, model, dealer, or vehicle?\n"
+                "  • What metric are you interested in — count, total sales, top N, or a comparison?\n\n"
+                "I'll give you a precise answer once I understand exactly what you need."
+            )
+        state["final_answer"]      = clarification_msg
+        state["confidence"]        = 0.0
+        state["validation_status"] = True   # treat as handled, not an error
+        state["is_relevant"]       = False   # short-circuit rest of pipeline
+        logger.info("[PLAN] Clarification needed — short-circuiting pipeline")
+
     logger.info(
         f"[PLAN] Result: relevant={state['is_relevant']}, "
+        f"clarification={planner_output.get('needs_clarification', False)}, "
         f"intent={planner_output.get('intent')}"
     )
     return state
@@ -98,16 +123,32 @@ def privacy_guard_node(state: SalesState) -> SalesState:
 # Node 3 — Relevance check
 # ─────────────────────────────────────────────────────────────────────────────
 def relevance_check_node(state: SalesState) -> SalesState:
-    """Gate irrelevant questions with a friendly message."""
+    """Gate irrelevant questions with a friendly, specific message."""
     if not state.get("is_relevant", True):
         logger.warning("[RELEVANCE] Question is not sales-related — rejecting.")
-        state["final_answer"] = (
-            "I can only answer questions about the automotive sales database "
-            "(brands, models, customers, dealers, vehicles, manufacturing plants). "
-            "Please rephrase your question."
-        )
-        state["confidence"]        = 0.0
-        state["validation_status"] = True   # treat as handled
+        rejection = state["planner_output"].get("rejection_reason", "")
+        if rejection == "privacy":
+            pass   # privacy_guard_node already set final_answer
+        elif rejection == "off_topic":
+            state["final_answer"] = (
+                "That question is outside the scope of this Sales Analytics system.\n\n"
+                "I can only help with questions about your automotive sales data, such as:\n"
+                "  • Brand and model performance\n"
+                "  • Dealer rankings and sales counts\n"
+                "  • Vehicle inventory and manufacturing output\n"
+                "  • Customer purchase statistics (aggregated only)\n\n"
+                "Please rephrase your question in terms of sales data."
+            )
+            state["confidence"]        = 0.0
+            state["validation_status"] = True
+        elif not state.get("final_answer"):  # fallback for any other reason
+            state["final_answer"] = (
+                "I need a bit more context to answer your question accurately.\n\n"
+                "Could you clarify what you'd like to know about your sales data? "
+                "For example: which brand, model, dealer, or time period are you interested in?"
+            )
+            state["confidence"]        = 0.0
+            state["validation_status"] = True
     else:
         logger.info("[RELEVANCE] Question accepted.")
     return state
@@ -153,7 +194,7 @@ def after_cache(state: SalesState) -> str:
 # Node 4 — SQL generation
 # ─────────────────────────────────────────────────────────────────────────────
 def sql_generation_node(state: SalesState) -> SalesState:
-    """Generate SQL query via Gemini."""
+    """Generate SQL query via Gemini. Never assumes — surfaces clarification instead."""
     if state.get("cache_hit") or not state.get("is_relevant", True):
         return state
 
@@ -165,10 +206,31 @@ def sql_generation_node(state: SalesState) -> SalesState:
     )
 
     if not sql_query:
-        logger.error("[SQL_GEN] SQL generation failed")
-        state["validation_status"] = False
+        logger.error("[SQL_GEN] SQL generation returned empty string")
+        state["validation_status"] = True
         state["confidence"]        = 0.0
-        state["final_answer"]      = "Unable to generate a SQL query for this question."
+        state["final_answer"] = (
+            "I was unable to translate your question into a database query.\n"
+            "Could you please rephrase it? Try being specific about:\n"
+            "  • Which entity you want to analyse (brand, model, dealer, plant)\n"
+            "  • What information you need (count, total, top N, comparison)"
+        )
+        state["is_relevant"] = False  # skip the rest of the pipeline
+        return state
+
+    # ── Detect CLARIFICATION_NEEDED sentinel from SQL agent ───────────────────
+    if sql_query.startswith("CLARIFICATION_NEEDED:"):
+        clarification_text = sql_query.replace("CLARIFICATION_NEEDED:", "").strip()
+        logger.warning(f"[SQL_GEN] Clarification needed: {clarification_text}")
+        state["final_answer"] = (
+            "I need a bit more detail to answer your question accurately.\n\n"
+            + clarification_text +
+            "\n\nPlease use the input box to provide this information, "
+            "or try clicking 'New Query' and rephrasing your question."
+        )
+        state["validation_status"] = True
+        state["confidence"]        = 0.0
+        state["is_relevant"]       = False  # skip execution & validation
         return state
 
     logger.info("=" * 80)
