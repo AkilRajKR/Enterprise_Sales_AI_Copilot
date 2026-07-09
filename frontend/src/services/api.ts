@@ -1,9 +1,11 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8002';
+// Backend runs on port 8000 (uvicorn api.main:app --port 8000)
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 60000, // 60s timeout for LLM calls
   headers: {
     'Content-Type': 'application/json',
   },
@@ -47,15 +49,7 @@ export interface HealthResponse {
 }
 
 export const askQuestion = async (question: string): Promise<QueryResponse> => {
-  console.log("API:", API_BASE_URL);
-  console.log("POST:", API_BASE_URL + "/ask");
-
-  const response = await apiClient.post<QueryResponse>("/ask", {
-    question,
-  });
-
-  console.log(response.data);
-
+  const response = await apiClient.post<QueryResponse>('/ask', { question });
   return response.data;
 };
 
@@ -65,10 +59,7 @@ export const getHistory = async (limit: number = 50): Promise<HistoryResponse> =
 };
 
 export const healthCheck = async (): Promise<HealthResponse> => {
-  console.log("GET:", API_BASE_URL + "/health");
-
-  const response = await apiClient.get<HealthResponse>("/health");
-
+  const response = await apiClient.get<HealthResponse>('/health');
   return response.data;
 };
 
