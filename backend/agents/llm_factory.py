@@ -6,10 +6,9 @@ Central factory for creating Gemini LLM instances with automatic fallback.
 Model priority order (all free tier):
   1. GEMINI_MODEL (from .env)                   — primary
   2. GEMINI_FALLBACK_MODEL (from .env)          — secondary
-  3. "gemini-1.5-flash"                         — hardcoded safety net
-
-On 429 RESOURCE_EXHAUSTED the caller should catch the error and call
-build_llm() again with use_fallback=True to obtain the fallback model.
+  3. "gemini-2.5-flash"                         — fallback safety net 1
+  4. "gemini-2.0-flash"                         — fallback safety net 2
+  5. "gemini-flash-latest"                      — fallback safety net 3
 """
 
 import logging
@@ -23,9 +22,11 @@ logger = logging.getLogger(__name__)
 # ── Model preference list ────────────────────────────────────────────────────
 # Lower index = higher preference. We stop at the first one that works.
 _FREE_TIER_MODELS = [
-    os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-    os.getenv("GEMINI_FALLBACK_MODEL", "gemini-1.5-flash-8b"),
-    "gemini-1.5-flash",           # absolute safety net
+    os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+    os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.0-flash"),
+    "gemini-2.5-flash",           # safety nets
+    "gemini-2.0-flash",
+    "gemini-flash-latest",
 ]
 
 
@@ -63,6 +64,7 @@ def build_llm(
         google_api_key=api_key,
         temperature=temperature,
         max_tokens=max_tokens,
+        max_retries=0,
     )
     return llm, model
 
@@ -75,7 +77,7 @@ def invoke_with_fallback(
     max_tokens: int = 500,
 ):
     """
-    Invoke a LangChain chain with automatic model fallback on quota errors.
+    Invoke a LangChain chain with automatic model fallback on any error (quota, 404, etc).
 
     Args:
         chain_builder: A callable that accepts an `llm` and returns a chain.
@@ -96,23 +98,44 @@ def invoke_with_fallback(
             response = chain.invoke(invoke_kwargs)
             if idx > 0:
                 logger.warning(
-                    f"[LLM_FACTORY] Primary model failed; succeeded with fallback: {model_name}"
+                    f"[LLM_FACTORY] Succeeded with fallback: {model_name} (idx {idx})"
                 )
             return response, model_name
 
         except Exception as exc:
             err_str = str(exc)
-            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
-                logger.warning(
-                    f"[LLM_FACTORY] Quota exceeded for '{model_name}' "
-                    f"(attempt {idx + 1}/{len(ORDERED_MODELS)}). Trying next model..."
-                )
-                last_error = exc
-                continue   # try next model
-            else:
-                # Non-quota error — re-raise immediately
-                raise
+            logger.warning(
+                f"[LLM_FACTORY] Model '{model_name}' failed with error: {err_str[:200]}..."
+                f"Trying next model in list."
+            )
+            last_error = exc
+            continue   # try next model
 
     # All models exhausted
     logger.error("[LLM_FACTORY] All models exhausted. Raising last error.")
     raise last_error
+
+
+def extract_text_content(response) -> str:
+    """
+    Safely extract string content from any ChatGoogleGenerativeAI response,
+    supporting both string content and list of content parts.
+    """
+    if response is None:
+        return ""
+    
+    # Check if we have an AIMessage or similar with a .content attribute
+    content = getattr(response, "content", response)
+    
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict) and "text" in part:
+                parts.append(part["text"])
+            elif hasattr(part, "text"):
+                parts.append(part.text)
+            elif isinstance(part, str):
+                parts.append(part)
+        return "".join(parts).strip()
+    
+    return str(content).strip()

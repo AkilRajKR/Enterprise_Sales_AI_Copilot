@@ -27,20 +27,20 @@ logger = logging.getLogger(__name__)
 
 # ── Keyword patterns that trigger a PII block ─────────────────────────────────
 _PII_QUESTION_PATTERNS: List[re.Pattern] = [
-    # Names
-    re.compile(r"\b(customer\s+name|client\s+name|full[\s_]name|first[\s_]name|last[\s_]name|person[\s_]name)\b", re.I),
+    # Names (e.g. customer name, customer's name, client's names, client name, person name)
+    re.compile(r"\b(customer|client|person|people|user|buyer|ownership)?'?s?\s*(names?|first_?names?|last_?names?|full_?names?|person_?names?)\b", re.I),
     # DOB / age of specific person
-    re.compile(r"\b(date[\s_]of[\s_]birth|dob|birth[\s_]date|birthdate|age\s+of\s+(the\s+)?(customer|client|person))\b", re.I),
+    re.compile(r"\b(date[\s_]*of[\s_]*births?|dob|birth[\s_]*dates?|birthdates?|birthdays?)\b", re.I),
     # Salary / income
-    re.compile(r"\b(salary|income|earnings|wage|compensation|pay[\s_]?slip)\b", re.I),
+    re.compile(r"\b(salar(y|ies)|incomes?|earnings?|wages?|compensations?|pay[\s_]?slips?)\b", re.I),
     # Address / location (individual)
-    re.compile(r"\b(home\s+address|residential\s+address|street\s+address|postal\s+address|zip\s+code\s+of\s+(the\s+)?(customer|client))\b", re.I),
+    re.compile(r"\b(customer|client|person)?'?s?\s*(home[\s_]*address(es)?|residential[\s_]*address(es)?|street[\s_]*address(es)?|postal[\s_]*address(es)?|zip[\s_]*codes?)\b", re.I),
     # Contact
-    re.compile(r"\b(phone\s+number|mobile\s+number|telephone|email\s+address|contact\s+(detail|info|number))\b", re.I),
+    re.compile(r"\b(phone[\s_]*numbers?|mobiles?|telephones?|emails?|email[\s_]*address(es)?|contact[\s_]*(details?|info|numbers?))\b", re.I),
     # Gov IDs
-    re.compile(r"\b(ssn|social[\s_]security|passport\s+number|national\s+id|driving[\s_]license|driver[\s_]license)\b", re.I),
+    re.compile(r"\b(ssn|social[\s_]*security|passport[\s_]*numbers?|national[\s_]*ids?|driving[\s_]*licenses?|driver[\s_]*licenses?)\b", re.I),
     # Financial IDs
-    re.compile(r"\b(credit[\s_]card|bank\s+account|account\s+number|iban|routing\s+number)\b", re.I),
+    re.compile(r"\b(credit[\s_]*cards?|bank[\s_]*accounts?|account[\s_]*numbers?|ibans?|routing[\s_]*numbers?)\b", re.I),
 ]
 
 # ── SQL column name patterns to scrub from results ────────────────────────────

@@ -4,7 +4,7 @@ import os
 from typing import Dict, Any, Tuple
 
 from langchain_core.prompts import ChatPromptTemplate
-from agents.llm_factory import invoke_with_fallback
+from agents.llm_factory import invoke_with_fallback, extract_text_content
 
 logger = logging.getLogger(__name__)
 
@@ -18,14 +18,13 @@ class PlannerAgent:
         self.prompt = ChatPromptTemplate.from_template(
             """
 You are the Planning Agent of an Enterprise Automotive Sales Analytics System.
+Your job is to classify the user question and return a JSON plan.
 
-Your ONLY job is to classify the user's question.
-
-=== AVAILABLE DATABASE TABLES ===
-- Brands            (vehicle manufacturers)
+=== DATABASE TABLES ===
+- Brands            (vehicle manufacturers / car makes)
 - Models            (vehicle models per brand)
 - Dealers           (dealerships)
-- Customers         (buyers — NO personal data like name, DOB, salary)
+- Customers         (buyers — counts only, NO personal data)
 - Customer_Ownership (completed vehicle sales)
 - Car_Vins          (individual vehicles)
 - Car_Parts         (vehicle parts)
@@ -33,37 +32,34 @@ Your ONLY job is to classify the user's question.
 - Dealer_Brand      (brands available at dealers)
 - Manufacture_Plant (manufacturing plants)
 
-=== STRICT RULES — READ CAREFULLY ===
+=== DECISION: needs_clarification ===
 
-RULE 1 — NEVER ASSUME:
-  If the question is vague, ambiguous, or you are not 100% sure what data is needed,
-  set "needs_clarification": true and fill "clarification_questions" with 1–3 short
-  plain-English questions that will help you understand exactly what the user wants.
-  DO NOT guess. DO NOT invent intent.
+Set needs_clarification: FALSE for these (they are CLEAR questions):
+- Counting entities: "how many customers", "how many vehicles", "how many dealers"
+- Ranking: "which brand has the most", "which dealer sold the most", "top 5 plants"
+- Aggregation: "total sales", "most popular", "highest sales volume"
+- Listing: "show me all brands", "list all models", "what options are available"
+- Any question with a clear entity (brand/model/dealer/customer/vehicle/plant/option/part)
+  AND a clear metric (count/total/most/highest/lowest/average/list)
 
-RULE 2 — NO PERSONAL DATA:
-  If the question asks for individual personal details (customer name, DOB, address,
-  salary, phone, email, passport, bank info), set "is_relevant": false and
-  "rejection_reason": "privacy".
+Set needs_clarification: TRUE ONLY if the question has NO clear entity AND NO clear metric:
+- "show me the data" -> no entity, no metric
+- "how is it performing?" -> no entity specified
+- "give me everything" -> too vague
+- "what do you have?" -> unclear scope
+- "show me something interesting" -> no focus
 
-RULE 3 — SCOPE:
-  Only answer questions about automotive sales, brands, models, dealers, vehicles,
-  manufacturing. If totally off-topic (e.g. weather, recipes), set "is_relevant": false
-  and "rejection_reason": "off_topic".
+=== PRIVACY RULE ===
+Personal identifiers (name, DOB, salary, phone, email, address, SSN, credit card)
+-> set is_relevant: false, rejection_reason: "privacy"
 
-RULE 4 — FORMAT:
-  Return JSON ONLY. No markdown. No explanation.
-  First character must be {{ and last must be }}.
+=== SCOPE RULE ===
+Non-automotive, non-sales topics (weather, recipes, geography, sports)
+-> set is_relevant: false, rejection_reason: "off_topic"
 
-=== CLARIFICATION EXAMPLES ===
-Question: "show me the data"
-→ needs_clarification: true, questions: ["Which data would you like to see — brands, models, dealers, or sales?", "Do you want totals or a breakdown by a specific category?"]
-
-Question: "how is it performing?"
-→ needs_clarification: true, questions: ["Which entity are you asking about — a specific brand, model, or dealer?", "What time period should I look at?"]
-
-Question: "give me everything"
-→ needs_clarification: true, questions: ["Everything is a very broad request. Could you specify which area — sales counts, dealer rankings, brand performance?"]
+=== OUTPUT RULES ===
+- Return JSON ONLY. No markdown. No explanation.
+- First character must be {{ and last must be }}
 
 === OUTPUT SCHEMA ===
 {{
@@ -90,14 +86,12 @@ User Question:
     # ── Public API ────────────────────────────────────────────────────────────
 
     def classify(self, question: str) -> Dict[str, Any]:
-        """Classify the question and return planner output (no usage tracking)."""
         result, _ = self.classify_with_usage(question)
         return result
 
     def classify_with_usage(
         self, question: str
     ) -> Tuple[Dict[str, Any], Dict[str, int]]:
-        """Classify the question and return (planner_output, token_usage)."""
         try:
             response, _model = invoke_with_fallback(
                 chain_builder=lambda llm: self.prompt | llm,
@@ -110,10 +104,10 @@ User Question:
             logger.info("=" * 80)
             logger.info("RAW GEMINI RESPONSE (Planner)")
             logger.info(response.content)
-            logger.info("=" * 80)
-
+            # Extract token usage from metadata
             usage = self._extract_usage(response)
-            content = response.content.strip()
+
+            content = extract_text_content(response)
 
             # Strip markdown fences if Gemini wraps the JSON
             for fence in ("```json", "```"):
@@ -142,19 +136,20 @@ User Question:
             logger.info(
                 f"[PLANNER] Intent={result['intent']} | "
                 f"NeedsClarification={result['needs_clarification']} | "
+                f"Rejection={result['rejection_reason']} | "
                 f"Tables={result['entities'].get('tables', [])}"
             )
             return result, usage
 
         except Exception as e:
-            logger.exception("[PLANNER] Planner failed")
+            logger.exception("[PLANNER] Planner failed — using fallback (no assumption)")
             # On LLM failure do NOT assume — ask for clarification
             fallback = {
                 "is_relevant": True,
                 "needs_clarification": True,
                 "clarification_questions": [
                     "I had trouble understanding your question. Could you rephrase it?",
-                    "Please be specific about which data you want — e.g. brand, model, dealer, or sales count.",
+                    "Please specify which data you want: brand, model, dealer, customer count, or sales.",
                 ],
                 "rejection_reason": "",
                 "intent": "unknown",

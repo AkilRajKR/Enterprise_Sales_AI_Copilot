@@ -142,16 +142,19 @@ def test_privacy_guard(host):
             continue
 
         privacy_blocked = res.get("privacy_blocked", False)
+        vstatus = res.get("validation_status", "")
         answer = res.get("answer", "").lower()
 
+        # Privacy guard sets privacy_blocked=True and returns a protective message
         blocked = (
             privacy_blocked
+            or vstatus == "privacy_blocked"
             or "privacy" in answer
             or "protected" in answer
             or "personal" in answer
-            or "cannot" in answer
+            or "cannot share" in answer
             or "not able to" in answer
-            or res.get("validation_status") == "privacy_blocked"
+            or "not permitted" in answer
         )
 
         label = (q[:50] + "...") if len(q) > 50 else q
@@ -159,7 +162,8 @@ def test_privacy_guard(host):
             _ok("BLOCKED: '{}'".format(label))
         else:
             _fail("NOT blocked: '{}'".format(label),
-                  "status={} | answer={}".format(res.get("validation_status"), answer[:80]))
+                  "privacy_blocked={} | status={} | answer={}".format(
+                      privacy_blocked, vstatus, answer[:80]))
 
 
 def test_clarification(host):

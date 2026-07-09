@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Tuple
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from agents.llm_factory import invoke_with_fallback
+from agents.llm_factory import invoke_with_fallback, extract_text_content
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ Question: {question}
             )
 
             usage = self._extract_usage(raw_response)
-            query = raw_response.content.strip()
+            query = extract_text_content(raw_response)
 
             # Strip markdown fences that Gemini may wrap the SQL in
             for fence in ("```sql", "```"):

@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Tuple
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from agents.llm_factory import invoke_with_fallback
+from agents.llm_factory import invoke_with_fallback, extract_text_content
 import json
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ Respond with ONLY valid JSON (no markdown fences):
             )
 
             usage   = self._extract_usage(raw_response)
-            content = raw_response.content.strip()
+            content = extract_text_content(raw_response)
 
             # Strip markdown fences if present
             for fence in ("```json", "```"):

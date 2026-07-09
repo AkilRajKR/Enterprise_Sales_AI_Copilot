@@ -4,7 +4,7 @@ from typing import Dict, Any, Tuple
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from agents.llm_factory import invoke_with_fallback
+from agents.llm_factory import invoke_with_fallback, extract_text_content
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ Answer:
             )
 
             usage  = self._extract_usage(raw_response)
-            answer = raw_response.content.strip()
+            answer = extract_text_content(raw_response)
 
             logger.info("[RESPONSE] Generated successfully")
             return answer, usage

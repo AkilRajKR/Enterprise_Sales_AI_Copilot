@@ -153,7 +153,7 @@ async def health_check():
 
 
 @app.post("/ask", response_model=QueryResponse)
-async def ask_question(request: QuestionRequest):
+def ask_question(request: QuestionRequest):
     global workflow
 
     if workflow is None:
@@ -237,7 +237,7 @@ async def ask_question(request: QuestionRequest):
 
 
 @app.get("/history")
-async def get_history(limit: int = Query(50, ge=1, le=100)):
+def get_history(limit: int = Query(50, ge=1, le=100)):
     """Retrieve query history from cache."""
     try:
         from agents.cache import CacheAgent
@@ -251,7 +251,7 @@ async def get_history(limit: int = Query(50, ge=1, le=100)):
 
 
 @app.get("/schema")
-async def get_schema(admin_key: str = Query(None)):
+def get_schema(admin_key: str = Query(None)):
     """Get database schema (admin only)."""
     if admin_key != os.getenv("ADMIN_SECRET_KEY", "admin"):
         raise HTTPException(status_code=403, detail="Unauthorized")

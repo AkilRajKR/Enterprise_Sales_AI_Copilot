@@ -102,10 +102,10 @@ def plan_node(state: SalesState) -> SalesState:
 # Node 2 — Privacy guard
 # ─────────────────────────────────────────────────────────────────────────────
 def privacy_guard_node(state: SalesState) -> SalesState:
-    """Block queries that request personal customer data (PII)."""
-    if not state.get("is_relevant", True):
-        return state
-
+    """Block queries requesting personal customer data (PII).
+    Runs ALWAYS — even if planner set needs_clarification.
+    Privacy is higher priority than clarification.
+    """
     blocked, reason = is_pii_question(state["user_question"])
     if blocked:
         logger.warning(f"[PRIVACY] Query blocked — PII pattern: {reason!r}")
@@ -113,6 +113,7 @@ def privacy_guard_node(state: SalesState) -> SalesState:
         state["final_answer"]      = block["final_answer"]
         state["confidence"]        = block["confidence"]
         state["validation_status"] = block["validation_status"]
+        state["privacy_blocked"]   = True
         state["is_relevant"]       = False   # short-circuit the rest of the pipeline
     else:
         logger.info("[PRIVACY] Query passed privacy check.")
