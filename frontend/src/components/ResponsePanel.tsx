@@ -320,32 +320,90 @@ const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoading, ques
         {/* Token usage */}
         {Object.keys(response!.token_usage).length > 0 && (
           <div style={{
-            background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '10px 14px',
+            background: 'rgba(30, 41, 59, 0.4)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: 12,
+            padding: '14px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-              <Info size={12} color="var(--text-muted)" />
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                Token Usage
-              </span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {Object.entries(response!.token_usage).map(([k, v]) => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                    {k.replace(/_/g, ' ')}
-                  </span>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {Number(v).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 5, marginTop: 3, display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Total</span>
-                <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent-cyan)' }}>
-                  {Object.values(response!.token_usage).reduce((a, b) => a + b, 0).toLocaleString()}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Zap size={13} color="var(--accent-cyan)" />
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
+                  Token Metrics
                 </span>
               </div>
+              <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(0, 212, 255, 0.12)', color: 'var(--accent-cyan)', fontWeight: 700 }}>
+                Gemini LLM
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Input Tokens</div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
+                  {((response!.token_usage.planner_input || 0) + (response!.token_usage.sql_input || 0) + (response!.token_usage.validator_input || 0) + (response!.token_usage.response_input || 0)).toLocaleString()}
+                </div>
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Output Tokens</div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--accent-cyan)', marginTop: '2px' }}>
+                  {((response!.token_usage.planner_output || 0) + (response!.token_usage.sql_output || 0) + (response!.token_usage.validator_output || 0) + (response!.token_usage.response_output || 0)).toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            {/* Collapsible/detailed Breakdown */}
+            <details style={{ cursor: 'pointer', outline: 'none' }}>
+              <summary style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, userSelect: 'none', display: 'flex', alignItems: 'center', gap: '4px', outline: 'none' }}>
+                <Info size={11} />
+                <span>Show Agent Breakdown</span>
+              </summary>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8, padding: '8px 4px 0 4px', borderTop: '1px dashed rgba(255,255,255,0.06)' }}>
+                {/* Planner */}
+                {((response!.token_usage.planner_input || 0) > 0) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Planner Agent</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                      {((response!.token_usage.planner_input || 0) + (response!.token_usage.planner_output || 0)).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                {/* SQL Agent */}
+                {((response!.token_usage.sql_input || 0) > 0) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>SQL Gen Agent</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                      {((response!.token_usage.sql_input || 0) + (response!.token_usage.sql_output || 0)).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                {/* Validator */}
+                {((response!.token_usage.validator_input || 0) > 0) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Validator Agent</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                      {((response!.token_usage.validator_input || 0) + (response!.token_usage.validator_output || 0)).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                {/* Response */}
+                {((response!.token_usage.response_input || 0) > 0) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Response Agent</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                      {((response!.token_usage.response_input || 0) + (response!.token_usage.response_output || 0)).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </details>
+
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10, marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Usage</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-cyan)' }}>
+                {Object.values(response!.token_usage).reduce((a, b) => a + b, 0).toLocaleString()} <span style={{ fontSize: '9px', fontWeight: 500, color: 'var(--text-muted)' }}>tokens</span>
+              </span>
             </div>
           </div>
         )}
