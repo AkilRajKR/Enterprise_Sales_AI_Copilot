@@ -36,6 +36,12 @@ function App() {
     if (!input.trim() || isLoading) return;
 
     const question = input.trim();
+    let queryToSend = question;
+
+    if (queryMode === 'followup' && activeQuery) {
+      queryToSend = `Regarding the previous query "${activeQuery}", answer: ${question}`;
+    }
+
     setCurrentQuestion(question);
     setInput('');
     setActiveQuery(question);
@@ -43,7 +49,7 @@ function App() {
     setResponse(null);
 
     try {
-      const res = await askQuestion(question);
+      const res = await askQuestion(queryToSend);
       setResponse(res);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to get response';
@@ -64,11 +70,11 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading]);
+  }, [input, isLoading, queryMode, activeQuery]);
 
   /* ── New Query: clear everything ── */
-  const handleNewQuery = useCallback(() => {
-    setInput('');
+  const handleNewQuery = useCallback((initialText: string = '') => {
+    setInput(initialText);
     setQueryMode('new');
     setResponse(null);
     setActiveQuery('');
@@ -88,12 +94,8 @@ function App() {
 
   /* ── Sample question clicked ── */
   const handleSampleClick = useCallback((q: string) => {
-    setInput(q);
-    setQueryMode('new');
-    setResponse(null);
-    setActiveQuery('');
-    setCurrentQuestion('');
-  }, []);
+    handleNewQuery(q);
+  }, [handleNewQuery]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>

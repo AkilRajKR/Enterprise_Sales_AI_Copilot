@@ -5,7 +5,7 @@ interface UserPanelProps {
   input: string;
   onInputChange: (v: string) => void;
   onSubmit: () => void;
-  onNewQuery: () => void;
+  onNewQuery: (initialText?: string) => void;
   onFollowUp: () => void;
   onClear: () => void;
   isLoading: boolean;
@@ -27,14 +27,67 @@ function detectPII(text: string): boolean {
   return PII_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-const SAMPLE_QUERIES = [
-  'Which brand has the most customers?',
-  'Which dealer sold the most vehicles?',
-  'How many total vehicles are in the database?',
-  'Which model has the highest sales volume?',
-  'Show the top 5 manufacturing plants by output.',
-  'What are the most popular car options?',
-];
+function getRelevantQueries(activeQuery: string): string[] {
+  if (!activeQuery) {
+    return [
+      'Which brand has the most customers?',
+      'Which dealer sold the most vehicles?',
+      'How many total vehicles are in the database?',
+      'Which model has the highest sales volume?',
+      'Show the top 5 manufacturing plants by output.',
+      'What are the most popular car options?',
+    ];
+  }
+
+  const query = activeQuery.toLowerCase();
+  const suggestions: string[] = [];
+
+  if (query.includes('brand') || query.includes('make') || query.includes('audi') || query.includes('bmw') || query.includes('toyota') || query.includes('ford')) {
+    suggestions.push(
+      'What are the top-selling models for the most popular brand?',
+      'Which dealers sell the highest volume of that brand?',
+      'What is the total customer count for each brand?',
+      'Compare the sales volume of the top 3 brands.'
+    );
+  } else if (query.includes('dealer') || query.includes('store') || query.includes('shop') || query.includes('sales')) {
+    suggestions.push(
+      'Which specific vehicle models are sold the most at the top dealer?',
+      'What are the top 5 dealers by total revenue?',
+      'List the brands available at the top-performing dealer.',
+      'Show dealers that have sold more than 50 vehicles.'
+    );
+  } else if (query.includes('plant') || query.includes('manufactur') || query.includes('factor') || query.includes('built') || query.includes('produce')) {
+    suggestions.push(
+      'Which models are manufactured at the top plant?',
+      'What is the total count of parts used in manufacturing?',
+      'Show the monthly manufacturing output per plant.',
+      'Compare manufactured counts vs sold counts for this year.'
+    );
+  } else if (query.includes('model') || query.includes('car') || query.includes('vehicle')) {
+    suggestions.push(
+      'Which brand produced the most popular model?',
+      'What are the most popular options selected for that model?',
+      'Which dealer has sold the most of that model?',
+      'What is the average price or option cost for that vehicle?'
+    );
+  } else if (query.includes('option') || query.includes('part') || query.includes('color') || query.includes('wheel') || query.includes('engine')) {
+    suggestions.push(
+      'Which option package is selected the most?',
+      'Show the top 5 most expensive car parts in inventory.',
+      'Which models are configured with custom options?',
+      'Find the total cost of parts for each manufactured brand.'
+    );
+  } else {
+    suggestions.push(
+      'Show the top 5 manufacturing plants by output.',
+      'Which dealer sold the most vehicles?',
+      'What are the most popular car options?',
+      'Which brand has the most customers?'
+    );
+  }
+
+  return Array.from(new Set(suggestions)).slice(0, 5);
+}
 
 const UserPanel: React.FC<UserPanelProps> = ({
   input, onInputChange, onSubmit, onNewQuery, onFollowUp, onClear,
@@ -63,7 +116,7 @@ const UserPanel: React.FC<UserPanelProps> = ({
 
   const handleConfirmPII = () => { setPIIConfirmed(true); setShowPIIWarning(false); };
 
-  const handleQuickQuery = (q: string) => { onInputChange(q); onNewQuery(); };
+  const handleQuickQuery = (q: string) => { onNewQuery(q); };
 
   return (
     <div style={{ width: 288, background: 'var(--bg-panel)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto' }}>
@@ -213,7 +266,7 @@ const UserPanel: React.FC<UserPanelProps> = ({
           Quick Queries
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {SAMPLE_QUERIES.map((q, i) => (
+          {getRelevantQueries(activeQuery).map((q, i) => (
             <button
               key={i}
               onClick={() => handleQuickQuery(q)}
