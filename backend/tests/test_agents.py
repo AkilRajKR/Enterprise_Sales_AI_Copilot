@@ -12,7 +12,7 @@ def test_planner_agent_initialization():
     api_key = os.getenv("GEMINI_API_KEY")
     planner = PlannerAgent(api_key)
     assert planner is not None
-    assert planner.llm is not None
+    assert planner.temperature == 0.1
 
 
 def test_cache_agent_initialization():

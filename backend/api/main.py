@@ -258,12 +258,14 @@ def get_schema(admin_key: str = Query(None)):
 
     try:
         db_path = os.getenv("DATABASE_PATH", "database/sales.db")
-        with sqlite3.connect(db_path) as conn:
+        conn = sqlite3.connect(db_path)
+        try:
             cursor = conn.cursor()
             cursor.execute("SELECT sql FROM sqlite_master WHERE type='table'")
             tables = cursor.fetchall()
-
-        return {"tables": [t[0] for t in tables if t[0]]}
+            return {"tables": [t[0] for t in tables if t[0]]}
+        finally:
+            conn.close()
 
     except Exception as e:
         logger.error(f"Error retrieving schema: {e}")

@@ -80,19 +80,51 @@ Question: {question}
     # ── Schema ────────────────────────────────────────────────────────────────
 
     def _get_schema(self) -> str:
+        conn = None
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT sql FROM sqlite_master
-                    WHERE type='table' AND name NOT LIKE 'sqlite_%'
-                    ORDER BY name
-                """)
-                schema_list = [row[0] for row in cursor.fetchall() if row[0]]
-            return "\n\n".join(schema_list)
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                ORDER BY name
+            """)
+            tables = [row[0] for row in cursor.fetchall()]
+            
+            schema_parts = []
+            for table in tables:
+                cursor.execute(f"PRAGMA table_info({table})")
+                columns = cursor.fetchall()
+                
+                cursor.execute(f"PRAGMA foreign_key_list({table})")
+                fkeys = cursor.fetchall()
+                
+                fk_map = {}
+                for fk in fkeys:
+                    fk_map[fk[3]] = f"FK -> {fk[2]}.{fk[4]}"
+                
+                col_strings = []
+                for col in columns:
+                    col_name = col[1]
+                    col_type = col[2]
+                    is_pk = col[5]
+                    
+                    desc = f"{col_name} {col_type}"
+                    if is_pk:
+                        desc += " PK"
+                    if col_name in fk_map:
+                        desc += f" {fk_map[col_name]}"
+                    col_strings.append(desc)
+                
+                schema_parts.append(f"{table} ({', '.join(col_strings)})")
+            
+            return "\n".join(schema_parts)
         except Exception as e:
             logger.error(f"[SQL] Error getting schema: {e}")
             return ""
+        finally:
+            if conn:
+                conn.close()
 
     # ── SQL generation ────────────────────────────────────────────────────────
 
@@ -170,20 +202,22 @@ Question: {question}
                 logger.error(f"[SQL] Dangerous keyword detected: {kw}")
                 return []
 
+        conn = None
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(sql_query)
-                rows = cursor.fetchall()
-
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(sql_query)
+            rows = cursor.fetchall()
             results = [dict(row) for row in rows]
             logger.info(f"[SQL] Executed: {len(results)} rows returned")
             return results
-
         except Exception as e:
             logger.error(f"[SQL] Error executing query: {e}")
             return []
+        finally:
+            if conn:
+                conn.close()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

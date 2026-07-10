@@ -23,10 +23,12 @@ logger = logging.getLogger(__name__)
 # Lower index = higher preference. We stop at the first one that works.
 _FREE_TIER_MODELS = [
     os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-    os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.0-flash"),
+    os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash"),
     "gemini-2.5-flash",           # safety nets
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
     "gemini-2.0-flash",
-    "gemini-flash-latest",
+    "gemini-2.0-flash-lite",
 ]
 
 
@@ -69,6 +71,9 @@ def build_llm(
     return llm, model
 
 
+_last_working_index = 0
+
+
 def invoke_with_fallback(
     chain_builder,          # callable(llm) -> runnable chain
     invoke_kwargs: dict,
@@ -89,23 +94,31 @@ def invoke_with_fallback(
     Returns:
         (response, model_name_used)
     """
+    global _last_working_index
     last_error: Optional[Exception] = None
+    num_models = len(ORDERED_MODELS)
 
-    for idx, model_name in enumerate(ORDERED_MODELS):
+    for i in range(num_models):
+        idx = (_last_working_index + i) % num_models
+        model_name = ORDERED_MODELS[idx]
         try:
             llm, model_name = build_llm(api_key, temperature, max_tokens, idx)
             chain = chain_builder(llm)
             response = chain.invoke(invoke_kwargs)
-            if idx > 0:
+            
+            if idx != _last_working_index:
                 logger.warning(
-                    f"[LLM_FACTORY] Succeeded with fallback: {model_name} (idx {idx})"
+                    f"[LLM_FACTORY] Succeeded with fallback: {model_name} (idx {idx}). "
+                    f"Updating last working index from {_last_working_index} to {idx}."
                 )
+                _last_working_index = idx
+                
             return response, model_name
 
         except Exception as exc:
             err_str = str(exc)
             logger.warning(
-                f"[LLM_FACTORY] Model '{model_name}' failed with error: {err_str[:200]}..."
+                f"[LLM_FACTORY] Model '{model_name}' failed with error: {err_str[:200]}... "
                 f"Trying next model in list."
             )
             last_error = exc
