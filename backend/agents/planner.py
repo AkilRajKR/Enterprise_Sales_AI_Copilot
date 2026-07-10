@@ -172,8 +172,12 @@ User Question:
         try:
             meta = getattr(response, "usage_metadata", None)
             if meta:
-                usage["input_tokens"]  = getattr(meta, "input_tokens",  0)
-                usage["output_tokens"] = getattr(meta, "output_tokens", 0)
+                if isinstance(meta, dict):
+                    usage["input_tokens"]  = meta.get("input_tokens",  0)
+                    usage["output_tokens"] = meta.get("output_tokens", 0)
+                else:
+                    usage["input_tokens"]  = getattr(meta, "input_tokens",  0)
+                    usage["output_tokens"] = getattr(meta, "output_tokens", 0)
         except Exception:
             pass
         return usage
