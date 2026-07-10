@@ -23,12 +23,11 @@ logger = logging.getLogger(__name__)
 # Lower index = higher preference. We stop at the first one that works.
 _FREE_TIER_MODELS = [
     os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-    os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash"),
+    os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.0-flash"),
     "gemini-2.5-flash",           # safety nets
-    "gemini-3.5-flash",
-    "gemini-3.1-flash-lite",
     "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-8b",
 ]
 
 

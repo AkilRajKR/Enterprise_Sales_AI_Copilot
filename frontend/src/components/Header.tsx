@@ -33,7 +33,7 @@ const Header: React.FC<HeaderProps> = ({ apiStatus }) => {
         </div>
         <div>
           <div style={{ fontSize: 13, fontWeight: 800, color: '#fff', letterSpacing: '0.5px', lineHeight: 1.2 }}>
-            ALLIANZ
+            KINETIX
           </div>
           <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '1px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
             Sales Analytics
@@ -52,7 +52,7 @@ const Header: React.FC<HeaderProps> = ({ apiStatus }) => {
           WebkitTextFillColor: 'transparent',
           margin: 0,
         }}>
-          Enterprise Sales AI Copilot
+          Kinetix Sales AI
         </h1>
       </div>
 

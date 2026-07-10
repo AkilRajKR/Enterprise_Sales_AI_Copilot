@@ -135,7 +135,7 @@ const UserPanel: React.FC<UserPanelProps> = ({
             <label style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: 5, letterSpacing: '0.5px', textTransform: 'uppercase' }}>Email</label>
             <input
               className="dark-input"
-              defaultValue="analyst@allianz.com"
+              defaultValue="analyst@kinetix.com"
               style={{ fontSize: 12 }}
             />
           </div>
@@ -215,7 +215,7 @@ const UserPanel: React.FC<UserPanelProps> = ({
           <button
             className={`btn btn-secondary ${queryMode === 'new' && !hasResult ? 'active' : ''}`}
             style={{ flex: 1, fontSize: 11, padding: '7px 8px' }}
-            onClick={onNewQuery}
+            onClick={() => onNewQuery()}
             disabled={isLoading}
             title="Start a fresh query (clears context)"
           >
